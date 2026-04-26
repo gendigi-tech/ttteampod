@@ -514,30 +514,32 @@ async function testKey(){
 }
 
 // ── Settings ──────────────────────────────────────────────────
-async function openSettings(){
-  const r=await fetch('/api/settings');const d=await r.json()
-  document.getElementById('s-tg-token').value=d.telegram_token||''
-  document.getElementById('s-tg-chat').value=d.telegram_chat_id||''
-  document.getElementById('s-grok-cookie').value=d.grok_cookie||''
-  document.getElementById('s-app-url').value=d.app_url||location.origin
+function openSettings(){
+  const s=JSON.parse(localStorage.getItem('pod_settings')||'{}')
+  document.getElementById('s-tg-token').value=s.telegram_token||''
+  document.getElementById('s-tg-chat').value=s.telegram_chat_id||''
+  document.getElementById('s-grok-cookie').value=s.grok_cookie||''
+  document.getElementById('s-app-url').value=s.app_url||location.origin
   document.getElementById('settings-modal').classList.add('open')
 }
 function closeSettings(){document.getElementById('settings-modal').classList.remove('open')}
-async function saveSettings(){
-  const payload={
-    telegram_token:  document.getElementById('s-tg-token').value.trim(),
-    telegram_chat_id:document.getElementById('s-tg-chat').value.trim(),
-    grok_cookie:     document.getElementById('s-grok-cookie').value.trim(),
-    app_url:         document.getElementById('s-app-url').value.trim()||location.origin,
+function saveSettings(){
+  const s={
+    telegram_token:   document.getElementById('s-tg-token').value.trim(),
+    telegram_chat_id: document.getElementById('s-tg-chat').value.trim(),
+    grok_cookie:      document.getElementById('s-grok-cookie').value.trim(),
+    app_url:          document.getElementById('s-app-url').value.trim()||location.origin,
   }
-  await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  localStorage.setItem('pod_settings', JSON.stringify(s))
   closeSettings()
-  log('✅ Đã lưu settings.','ok')
+  log('✅ Đã lưu settings vào browser.','ok')
 }
 async function testTelegram(){
   const st=document.getElementById('tg-status')
   st.textContent='Đang gửi...'
-  const r=await fetch('/api/test-telegram');const d=await r.json()
+  const s=JSON.parse(localStorage.getItem('pod_settings')||'{}')
+  const r=await fetch(`/api/test-telegram?token=${encodeURIComponent(s.telegram_token||'')}&chat_id=${encodeURIComponent(s.telegram_chat_id||'')}`)
+  const d=await r.json()
   st.className=`tg-status ${d.ok?'tg-ok':'tg-fail'}`
   st.textContent=d.ok?'✓ Gửi thành công!':'✗ Lỗi — kiểm tra token & chat ID'
 }
@@ -567,7 +569,14 @@ async function runFolder(idx){
   await new Promise(res=>{
     const proto=location.protocol==='https:'?'wss':'ws'
     ws=new WebSocket(`${proto}://${location.host}/ws/process`)
-    ws.onopen=()=>ws.send(JSON.stringify({api_key:key,prompt,images,mode:currentMode,folder_name:g.name}))
+    const ls=JSON.parse(localStorage.getItem('pod_settings')||'{}')
+    ws.onopen=()=>ws.send(JSON.stringify({
+      api_key:key, prompt, images, mode:currentMode, folder_name:g.name,
+      telegram_token:ls.telegram_token||'',
+      telegram_chat_id:ls.telegram_chat_id||'',
+      app_url:ls.app_url||location.origin,
+      grok_cookie:ls.grok_cookie||''
+    }))
     ws.onmessage=e=>handleMsg(JSON.parse(e.data),g,idx,res)
     ws.onerror=()=>{log('❌ WebSocket lỗi','err');res()}
     ws.onclose=()=>{if(running)res()}
@@ -668,6 +677,10 @@ function addResult(filename,origName){
     </div>`
   document.getElementById('res-grid').prepend(c)
   document.querySelectorAll('.tab')[1].click()
+  // Save to localStorage history
+  const h=JSON.parse(localStorage.getItem('pod_history')||'[]')
+  h.unshift({result:filename,original:origName,timestamp:new Date().toLocaleString('vi-VN'),prompt:document.getElementById('prompt').value.slice(0,80)})
+  localStorage.setItem('pod_history',JSON.stringify(h.slice(0,200)))
 }
 function dlFile(n){const a=document.createElement('a');a.href=`/api/download/${n}`;a.download=n;a.click()}
 function dlAll(){window.location.href='/api/download-all'}
@@ -686,7 +699,9 @@ function closePreview(){document.getElementById('preview-modal').classList.remov
 // ── History ───────────────────────────────────────────────────
 async function loadHistory(){
   try{
-    const r=await fetch('/api/history');const h=await r.json()
+    // Load from localStorage first (persistent), then enrich with server data
+    const localH=JSON.parse(localStorage.getItem('pod_history')||'[]')
+    const h=localH
     const grid=document.getElementById('hist-grid')
     const empty=document.getElementById('hist-empty')
     const actions=document.getElementById('hist-actions')
@@ -716,7 +731,10 @@ async function loadHistory(){
   }catch{}
 }
 async function delHist(name,card){
-  await fetch(`/api/history/${name}`,{method:'DELETE'})
+  await fetch(`/api/history/${name}`,{method:'DELETE'}).catch(()=>{})
+  // Remove from localStorage
+  const h=JSON.parse(localStorage.getItem('pod_history')||'[]').filter(e=>e.result!==name)
+  localStorage.setItem('pod_history',JSON.stringify(h))
   card.remove()
   if(!document.getElementById('hist-grid').children.length){
     document.getElementById('hist-empty').style.display='flex'
@@ -725,7 +743,8 @@ async function delHist(name,card){
 }
 async function clearHistory(){
   if(!confirm('Xoá toàn bộ lịch sử?'))return
-  await fetch('/api/history',{method:'DELETE'})
+  await fetch('/api/history',{method:'DELETE'}).catch(()=>{})
+  localStorage.removeItem('pod_history')
   loadHistory()
 }
 
