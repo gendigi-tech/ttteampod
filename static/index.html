@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POD Renew Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0d14;--bg2:#12131e;--bg3:#1a1b2e;
+  --border:#252640;--border2:#353660;
+  --accent:#7c6bff;--accent2:#6355e0;
+  --green:#10b981;--red:#ef4444;--amber:#f59e0b;--cyan:#06b6d4;
+  --text:#e8eaf0;--muted:#6b7280;
+  --r:10px;--mono:'Space Mono',monospace;--sans:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+
+/* ── Login screen ── */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:20px;
+}
+.login-box{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:16px;padding:40px;width:100%;max-width:380px;
+  text-align:center;
+}
+.login-logo{font-family:var(--mono);font-size:28px;font-weight:700;margin-bottom:6px}
+.login-logo span{color:var(--accent)}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:32px}
+.login-box input{
+  width:100%;padding:12px 16px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--r);
+  color:var(--text);font-size:14px;outline:none;
+  transition:border-color .2s;margin-bottom:12px;
+}
+.login-box input:focus{border-color:var(--accent)}
+.btn-login{
+  width:100%;padding:12px;background:var(--accent);
+  border:none;border-radius:var(--r);color:#fff;
+  font-family:var(--mono);font-size:13px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+}
+.btn-login:hover{background:var(--accent2);transform:translateY(-1px)}
+.login-err{color:var(--red);font-size:12px;margin-top:8px;display:none}
+
+/* ── App layout ── */
+#app{display:none}
+header{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:14px 28px;display:flex;align-items:center;gap:12px;
+}
+.logo{font-family:var(--mono);font-size:18px;font-weight:700}
+.logo span{color:var(--accent)}
+.logo-sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.api-wrap{display:flex;align-items:center;gap:8px}
+.api-wrap label{font-size:11px;color:var(--muted);white-space:nowrap;font-family:var(--mono)}
+.api-wrap input{
+  width:220px;padding:7px 12px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-size:12px;font-family:var(--mono);outline:none;
+}
+.api-wrap input:focus{border-color:var(--accent)}
+.api-badge{font-size:11px;font-family:var(--mono);padding:3px 8px;border-radius:4px;display:none}
+.api-badge.ok{background:rgba(16,185,129,.15);color:var(--green);display:inline}
+.api-badge.fail{background:rgba(239,68,68,.15);color:var(--red);display:inline}
+.btn-sm{
+  padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:6px;color:var(--muted);font-size:11px;font-family:var(--mono);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
+
+.main{display:grid;grid-template-columns:360px 1fr;height:calc(100vh - 57px);overflow:hidden}
+
+/* ── Left panel ── */
+.left{
+  background:var(--bg2);border-right:1px solid var(--border);
+  overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px;
+}
+.section-label{
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);font-family:var(--mono);margin-bottom:8px;
+}
+
+/* Upload zone */
+.upload-zone{
+  border:2px dashed var(--border2);border-radius:var(--r);
+  padding:28px 20px;text-align:center;cursor:pointer;
+  transition:all .2s;position:relative;
+}
+.upload-zone:hover,.upload-zone.drag{
+  border-color:var(--accent);background:rgba(124,107,255,.05);
+}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.upload-icon{font-size:32px;margin-bottom:8px}
+.upload-text{font-size:13px;color:var(--muted)}
+.upload-text strong{color:var(--text)}
+.upload-count{
+  font-size:12px;color:var(--accent);font-family:var(--mono);
+  margin-top:6px;display:none;
+}
+
+/* Thumbnails */
+.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.thumb{
+  aspect-ratio:1;background:var(--bg3);border-radius:6px;
+  overflow:hidden;position:relative;border:1px solid var(--border);
+}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb-more{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;aspect-ratio:1;display:flex;
+  align-items:center;justify-content:center;
+  font-size:12px;color:var(--muted);font-family:var(--mono);
+}
+
+/* Presets */
+.preset-grid{display:flex;flex-wrap:wrap;gap:6px}
+.preset{
+  padding:5px 12px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:20px;color:var(--muted);font-size:11px;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.preset:hover{border-color:var(--accent);color:var(--accent)}
+.preset.active{background:rgba(124,107,255,.15);border-color:var(--accent);color:var(--accent)}
+
+/* Prompt */
+textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text);font-size:12px;
+  font-family:var(--mono);padding:10px 12px;resize:vertical;
+  min-height:80px;outline:none;transition:border-color .2s;line-height:1.6;
+}
+textarea:focus{border-color:var(--accent)}
+
+.divider{height:1px;background:var(--border)}
+
+/* Buttons */
+.btn-start{
+  width:100%;padding:13px;background:var(--accent);
+  border:none;border-radius:var(--r);color:#fff;
+  font-family:var(--mono);font-size:13px;font-weight:700;cursor:pointer;
+  transition:all .2s;box-shadow:0 4px 20px rgba(124,107,255,.3);
+}
+.btn-start:hover{background:var(--accent2);transform:translateY(-1px)}
+.btn-start:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-stop{
+  width:100%;padding:11px;background:transparent;
+  border:1px solid var(--red);border-radius:var(--r);
+  color:var(--red);font-family:var(--mono);font-size:12px;
+  cursor:pointer;display:none;margin-top:8px;transition:background .2s;
+}
+.btn-stop:hover{background:rgba(239,68,68,.1)}
+
+/* ── Right panel ── */
+.right{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+
+/* Stats */
+.stats{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  border-bottom:1px solid var(--border);background:var(--bg2);
+}
+.stat{padding:14px 16px;border-right:1px solid var(--border)}
+.stat:last-child{border-right:none}
+.stat-val{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.stat-lbl{font-size:10px;color:var(--muted);font-family:var(--mono);letter-spacing:1px;margin-top:3px}
+
+/* Progress */
+.prog-wrap{
+  padding:10px 20px;background:var(--bg2);
+  border-bottom:1px solid var(--border);
+}
+.prog-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));
+  border-radius:2px;transition:width .4s;width:0%}
+.prog-info{display:flex;justify-content:space-between;font-size:10px;
+  color:var(--muted);font-family:var(--mono)}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2)}
+.tab{
+  padding:10px 20px;font-size:12px;font-family:var(--mono);
+  color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;
+  transition:all .15s;
+}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* Log */
+.log{
+  flex:1;overflow-y:auto;padding:14px 20px;
+  font-family:var(--mono);font-size:12px;line-height:2;
+  display:none;
+}
+.log.active{display:block}
+.log-line{display:flex;gap:10px;border-bottom:1px solid rgba(255,255,255,.02);padding:1px 0}
+.log-ts{color:var(--muted);min-width:56px;flex-shrink:0}
+.log-msg{word-break:break-all}
+.log-msg.ok{color:var(--green)}
+.log-msg.err{color:var(--red)}
+.log-msg.warn{color:var(--amber)}
+.log-msg.info{color:var(--accent)}
+.log-msg.dim{color:var(--muted)}
+
+/* Results grid */
+.results-panel{
+  flex:1;overflow-y:auto;padding:16px 20px;display:none;
+}
+.results-panel.active{display:block}
+.results-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;
+}
+.result-card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;
+}
+.result-img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.result-info{padding:8px 10px}
+.result-name{font-size:10px;color:var(--muted);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.btn-dl{
+  width:100%;padding:5px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;
+}
+.btn-dl:hover{border-color:var(--accent);color:var(--accent)}
+.results-actions{
+  display:flex;gap:8px;margin-bottom:14px;align-items:center;
+}
+.empty-results{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;height:200px;color:var(--muted);
+  font-size:13px;gap:8px;
+}
+
+/* Done banner */
+.done-banner{
+  margin:12px 20px 0;background:rgba(16,185,129,.08);
+  border:1px solid rgba(16,185,129,.25);border-radius:var(--r);
+  padding:12px 16px;font-family:var(--mono);font-size:13px;
+  color:var(--green);display:none;
+}
+.done-banner.show{display:block}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><span>POD</span>.RENEW</div>
+    <div class="login-sub">AI T-Shirt Design Renewal Tool</div>
+    <input type="password" id="pw-input" placeholder="Nhập mật khẩu truy cập..."
+           onkeydown="if(event.key==='Enter') doLogin()">
+    <button class="btn-login" onclick="doLogin()">ĐĂNG NHẬP</button>
+    <div class="login-err" id="login-err">Sai mật khẩu, thử lại!</div>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════════════════ -->
+<div id="app">
+  <header>
+    <div class="logo"><span>POD</span>.RENEW</div>
+    <div class="logo-sub">AI Design Renewal</div>
+    <div class="header-right">
+      <div class="api-wrap">
+        <label>XAI API KEY</label>
+        <input type="password" id="api-key" placeholder="xai-xxxxxxxxxx"
+               oninput="saveKey()" value="">
+        <button class="btn-sm" onclick="testKey()">Test</button>
+        <span class="api-badge" id="api-badge"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ── LEFT ── -->
+    <div class="left">
+
+      <div>
+        <div class="section-label">Ảnh sản phẩm</div>
+        <div class="upload-zone" id="dropzone"
+             ondragover="e=>{e.preventDefault();this.classList.add('drag')}"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          <input type="file" multiple accept="image/*" onchange="handleFiles(this.files)">
+          <div class="upload-icon">📁</div>
+          <div class="upload-text"><strong>Kéo thả ảnh vào đây</strong><br>hoặc click để chọn</div>
+          <div class="upload-count" id="upload-count"></div>
+        </div>
+        <div class="thumbs" id="thumbs" style="margin-top:8px"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Preset Prompt</div>
+        <div class="preset-grid" id="presets"></div>
+      </div>
+
+      <div>
+        <div class="section-label">Prompt tuỳ chỉnh</div>
+        <textarea id="prompt" placeholder="Nhập yêu cầu xử lý ảnh...&#10;Ví dụ: Remove watermark and change background to white"></textarea>
+      </div>
+
+      <div class="divider"></div>
+
+      <div style="margin-top:auto">
+        <button class="btn-start" id="btn-start" onclick="startProcess()">
+          ▶&nbsp;&nbsp;BẮT ĐẦU XỬ LÝ
+        </button>
+        <button class="btn-stop" id="btn-stop" onclick="stopProcess()">
+          ■&nbsp;&nbsp;DỪNG LẠI
+        </button>
+      </div>
+    </div>
+
+    <!-- ── RIGHT ── -->
+    <div class="right">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-val" id="s-total" style="color:var(--cyan)">0</div>
+          <div class="stat-lbl">TỔNG ẢNH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="s-cur" style="color:var(--amber)">—</div>
+          <div class="stat-lbl">ĐANG LÀM</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="s-ok" style="color:var(--green)">0</div>
+          <div class="stat-lbl">HOÀN THÀNH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="s-fail" style="color:var(--red)">0</div>
+          <div class="stat-lbl">THẤT BẠI</div>
+        </div>
+      </div>
+
+      <div class="prog-wrap">
+        <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+        <div class="prog-info">
+          <span id="prog-file">Chưa bắt đầu</span>
+          <span id="prog-pct">0%</span>
+        </div>
+      </div>
+
+      <div class="done-banner" id="done-banner"></div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('log',this)">▸ Activity Log</div>
+        <div class="tab" onclick="switchTab('results',this)">◈ Kết quả (<span id="result-count">0</span>)</div>
+      </div>
+
+      <div class="log active" id="tab-log"></div>
+
+      <div class="results-panel" id="tab-results">
+        <div class="results-actions" id="results-actions" style="display:none">
+          <button class="btn-sm" onclick="downloadAll()">⬇ Tải tất cả (ZIP)</button>
+          <button class="btn-sm" onclick="clearResults()">🗑 Xoá tất cả</button>
+        </div>
+        <div class="results-grid" id="results-grid"></div>
+        <div class="empty-results" id="empty-results">
+          <span style="font-size:32px;opacity:.3">🖼</span>
+          Ảnh đã xử lý sẽ hiện ở đây
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Presets ──────────────────────────────────────────────────
+const PRESETS = {
+  "🚫 Xoá watermark": "Remove all watermarks, logos and copyright marks. Keep original artwork intact.",
+  "⬜ Nền trắng":      "Change background to pure white #FFFFFF. Keep the main design exactly the same.",
+  "⬛ Nền đen":        "Change background to pure black #000000. Keep the main design exactly the same.",
+  "🔲 Xoá nền":        "Remove background completely. Keep only the main design/artwork.",
+  "✨ Nâng chất lượng":"Enhance image quality: sharpen details, boost colors, remove noise and artifacts.",
+  "🎨 Renew design":   "Recreate this t-shirt design in a modern clean flat illustration style. Same concept, fresh look.",
+}
+
+// ── State ─────────────────────────────────────────────────────
+let selectedFiles = []
+let ws = null
+let running = false
+
+// ── Init ──────────────────────────────────────────────────────
+window.onload = () => {
+  // Load saved API key
+  const k = localStorage.getItem('xai_key') || ''
+  document.getElementById('api-key').value = k
+
+  // Build presets
+  const pf = document.getElementById('presets')
+  for (const [label] of Object.entries(PRESETS)) {
+    const d = document.createElement('div')
+    d.className = 'preset'
+    d.textContent = label
+    d.onclick = () => applyPreset(label, d)
+    pf.appendChild(d)
+  }
+
+  logMsg('🚀  POD Renew Tool sẵn sàng.', 'info')
+  logMsg('    Upload ảnh → chọn prompt → bấm Bắt Đầu.', 'dim')
+}
+
+// ── Login ─────────────────────────────────────────────────────
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value
+  const r  = await fetch(`/api/auth?password=${encodeURIComponent(pw)}`)
+  const d  = await r.json()
+  if (d.ok) {
+    document.getElementById('login-screen').style.display = 'none'
+    document.getElementById('app').style.display = 'block'
+  } else {
+    document.getElementById('login-err').style.display = 'block'
+  }
+}
+
+// ── File handling ─────────────────────────────────────────────
+function handleFiles(files) {
+  selectedFiles = Array.from(files)
+  updateFileUI()
+}
+
+function handleDrop(e) {
+  e.preventDefault()
+  document.getElementById('dropzone').classList.remove('drag')
+  handleFiles(e.dataTransfer.files)
+}
+
+function updateFileUI() {
+  const n = selectedFiles.length
+  const cnt = document.getElementById('upload-count')
+  cnt.textContent = `${n} ảnh đã chọn`
+  cnt.style.display = n ? 'block' : 'none'
+  document.getElementById('s-total').textContent = n
+
+  // Thumbnails
+  const tb = document.getElementById('thumbs')
+  tb.innerHTML = ''
+  const show = selectedFiles.slice(0, 7)
+  show.forEach(f => {
+    const d = document.createElement('div')
+    d.className = 'thumb'
+    const img = document.createElement('img')
+    img.src = URL.createObjectURL(f)
+    d.appendChild(img); tb.appendChild(d)
+  })
+  if (n > 7) {
+    const d = document.createElement('div')
+    d.className = 'thumb-more'
+    d.textContent = `+${n-7}`
+    tb.appendChild(d)
+  }
+}
+
+// ── Presets ───────────────────────────────────────────────────
+function applyPreset(label, el) {
+  document.querySelectorAll('.preset').forEach(b => b.classList.remove('active'))
+  el.classList.add('active')
+  document.getElementById('prompt').value = PRESETS[label]
+}
+
+// ── API key ───────────────────────────────────────────────────
+function saveKey() {
+  localStorage.setItem('xai_key', document.getElementById('api-key').value)
+  document.getElementById('api-badge').className = 'api-badge'
+}
+
+async function testKey() {
+  const k = document.getElementById('api-key').value.trim()
+  const b = document.getElementById('api-badge')
+  if (!k) { b.className='api-badge fail'; b.textContent='⚠ Nhập key'; return }
+  b.className='api-badge'; b.textContent='...'
+  try {
+    const r = await fetch('https://api.x.ai/v1/models',
+      { headers: { Authorization: `Bearer ${k}` } })
+    b.className = `api-badge ${r.ok?'ok':'fail'}`
+    b.textContent = r.ok ? '✓ Valid' : `✗ ${r.status}`
+  } catch { b.className='api-badge fail'; b.textContent='✗ Lỗi' }
+}
+
+// ── Process ───────────────────────────────────────────────────
+async function startProcess() {
+  const key    = document.getElementById('api-key').value.trim()
+  const prompt = document.getElementById('prompt').value.trim()
+  if (!selectedFiles.length) { alert('Chưa chọn ảnh!'); return }
+  if (!prompt)  { alert('Chưa nhập prompt!'); return }
+  if (!key)     { alert('Chưa nhập API Key!'); return }
+
+  running = true
+  document.getElementById('btn-start').disabled = true
+  document.getElementById('btn-stop').style.display = 'block'
+  document.getElementById('done-banner').className = 'done-banner'
+  document.getElementById('s-ok').textContent = '0'
+  document.getElementById('s-fail').textContent = '0'
+  document.getElementById('prog-fill').style.width = '0%'
+
+  // Read all files as base64
+  logMsg(`▸  Đọc ${selectedFiles.length} ảnh...`, 'info')
+  const images = await Promise.all(selectedFiles.map(async f => {
+    const b64 = await readFileBase64(f)
+    return { name: f.name, data: b64, type: f.type || 'image/jpeg' }
+  }))
+
+  // Open WebSocket
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  ws = new WebSocket(`${proto}://${location.host}/ws/process`)
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ api_key: key, prompt, images }))
+  }
+
+  ws.onmessage = e => handleMsg(JSON.parse(e.data))
+
+  ws.onerror = () => {
+    logMsg('❌ WebSocket lỗi', 'err'); onFinish()
+  }
+  ws.onclose = () => { if (running) onFinish() }
+}
+
+function stopProcess() {
+  running = false
+  if (ws) ws.close()
+  logMsg('⏹  Đã dừng.', 'warn')
+  onFinish()
+}
+
+function readFileBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(r.result.split(',')[1])
+    r.onerror = rej
+    r.readAsDataURL(file)
+  })
+}
+
+function handleMsg(d) {
+  switch (d.type) {
+    case 'start':
+      document.getElementById('s-total').textContent = d.total
+      break
+    case 'progress':
+      document.getElementById('s-cur').textContent = d.current
+      setProgress(d.current, d.total, d.filename)
+      logMsg(d.message)
+      break
+    case 'log':
+      logMsg(d.message, 'dim'); break
+    case 'success':
+      document.getElementById('s-ok').textContent =
+        parseInt(document.getElementById('s-ok').textContent) + 1
+      logMsg(d.message, 'ok')
+      addResult(d.result)
+      break
+    case 'fail':
+      document.getElementById('s-fail').textContent =
+        parseInt(document.getElementById('s-fail').textContent) + 1
+      logMsg(d.message, 'err'); break
+    case 'error':
+      logMsg('❌ ' + d.message, 'err'); break
+    case 'done':
+      setProgress(d.total, d.total, '')
+      document.getElementById('s-cur').textContent = '✓'
+      const b = document.getElementById('done-banner')
+      b.textContent = d.message; b.className = 'done-banner show'
+      logMsg(d.message, 'ok')
+      running = false; onFinish()
+      break
+  }
+}
+
+function onFinish() {
+  running = false
+  document.getElementById('btn-start').disabled = false
+  document.getElementById('btn-stop').style.display = 'none'
+}
+
+// ── Progress ──────────────────────────────────────────────────
+function setProgress(cur, total, file) {
+  const pct = total ? Math.round(cur/total*100) : 0
+  document.getElementById('prog-fill').style.width = pct + '%'
+  document.getElementById('prog-file').textContent = file || '—'
+  document.getElementById('prog-pct').textContent = pct + '%'
+}
+
+// ── Log ───────────────────────────────────────────────────────
+function logMsg(msg, cls='') {
+  const el = document.getElementById('tab-log')
+  const d  = document.createElement('div')
+  d.className = 'log-line'
+  const ts = new Date().toTimeString().slice(0,8)
+  d.innerHTML = `<span class="log-ts">${ts}</span><span class="log-msg ${cls}">${msg.replace(/</g,'&lt;')}</span>`
+  el.appendChild(d)
+  el.scrollTop = el.scrollHeight
+}
+
+// ── Results ───────────────────────────────────────────────────
+let resultCount = 0
+function addResult(filename) {
+  resultCount++
+  document.getElementById('result-count').textContent = resultCount
+  document.getElementById('empty-results').style.display = 'none'
+  document.getElementById('results-actions').style.display = 'flex'
+
+  const grid = document.getElementById('results-grid')
+  const card = document.createElement('div')
+  card.className = 'result-card'
+  card.innerHTML = `
+    <img class="result-img" src="/api/download/${filename}" 
+         onerror="this.style.background='#1a1b2e'">
+    <div class="result-info">
+      <div class="result-name">${filename}</div>
+      <button class="btn-dl" onclick="downloadFile('${filename}')">⬇ Tải về</button>
+    </div>`
+  grid.prepend(card)
+}
+
+function downloadFile(name) {
+  const a = document.createElement('a')
+  a.href = `/api/download/${name}`
+  a.download = name; a.click()
+}
+
+async function downloadAll() {
+  window.location.href = '/api/download-all'
+}
+
+function clearResults() {
+  document.getElementById('results-grid').innerHTML = ''
+  document.getElementById('empty-results').style.display = 'flex'
+  document.getElementById('results-actions').style.display = 'none'
+  resultCount = 0
+  document.getElementById('result-count').textContent = '0'
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  document.querySelectorAll('.log,.results-panel').forEach(p => p.classList.remove('active'))
+  el.classList.add('active')
+  document.getElementById(`tab-${id}`).classList.add('active')
+}
+</script>
+</body>
+</html>
