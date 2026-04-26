@@ -140,47 +140,58 @@ async def process_image(b64, mt, name, prompt, api_key, ws, send):
     headers = {"Authorization": f"Bearer {api_key}",
                "Content-Type": "application/json"}
 
-    await send(type="log", message="  🔍 Phân tích ảnh với Grok Vision...")
-
-    vision_prompt = (
-        "Describe this image in detail for image regeneration purposes. "
-        f"Then create a generation prompt that applies: {prompt}. "
-        "Reply ONLY with the final generation prompt in English. No explanation."
-    )
+    await send(type="log", message="  🎨 Đang chỉnh sửa ảnh với Grok Imagine...")
 
     async with httpx.AsyncClient(timeout=120) as c:
-        # Step 1: Vision analysis
+        # Dùng /images/edits — gửi ảnh gốc + prompt, nhận ảnh đã chỉnh sửa
         r = await c.post(
-            "https://api.x.ai/v1/chat/completions",
+            "https://api.x.ai/v1/images/edits",
             headers=headers,
             json={
-                "model": "grok-2-vision-1212",
-                "messages": [{"role": "user", "content": [
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:{mt};base64,{b64}"}},
-                    {"type": "text", "text": vision_prompt}
-                ]}],
-                "max_tokens": 500,
+                "model": "grok-imagine-image",
+                "prompt": prompt,
+                "image": {
+                    "type": "image_url",
+                    "url": f"data:{mt};base64,{b64}"
+                },
+                "response_format": "b64_json"
             }
         )
+
         if r.status_code != 200:
-            raise Exception(f"Vision API lỗi {r.status_code}: {r.text[:150]}")
+            # Fallback: dùng generations nếu edits không hỗ trợ
+            await send(type="log", message="  🔍 Thử phân tích ảnh trước...")
+            r_vis = await c.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": "grok-2-vision",
+                    "messages": [{"role": "user", "content": [
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:{mt};base64,{b64}"}},
+                        {"type": "text",
+                         "text": f"Describe this image for regeneration, then apply: {prompt}. Reply ONLY with a generation prompt in English."}
+                    ]}],
+                    "max_tokens": 400,
+                }
+            )
+            if r_vis.status_code != 200:
+                raise Exception(f"Vision API lỗi {r_vis.status_code}: {r_vis.text[:150]}")
 
-        gen_prompt = r.json()["choices"][0]["message"]["content"].strip()
-        await send(type="log", message=f"  ✏️  Prompt: {gen_prompt[:100]}...")
+            gen_prompt = r_vis.json()["choices"][0]["message"]["content"].strip()
+            await send(type="log", message=f"  🖼️  Tạo ảnh mới...")
 
-        # Step 2: Image generation
-        await send(type="log", message="  🎨 Tạo ảnh mới với Aurora...")
-        r2 = await c.post(
-            "https://api.x.ai/v1/images/generations",
-            headers=headers,
-            json={"model": "aurora", "prompt": gen_prompt,
-                  "n": 1, "response_format": "b64_json"}
-        )
-        if r2.status_code != 200:
-            raise Exception(f"Image gen lỗi {r2.status_code}: {r2.text[:150]}")
+            r2 = await c.post(
+                "https://api.x.ai/v1/images/generations",
+                headers=headers,
+                json={"model": "grok-2-image-1212", "prompt": gen_prompt,
+                      "n": 1, "response_format": "b64_json"}
+            )
+            if r2.status_code != 200:
+                raise Exception(f"Image gen lỗi {r2.status_code}: {r2.text[:150]}")
+            r = r2
 
-        item = r2.json()["data"][0]
+        item = r.json()["data"][0]
         out_b64 = item.get("b64_json")
 
         if not out_b64 and "url" in item:
