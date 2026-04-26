@@ -55,9 +55,8 @@ async def post_settings(payload: SettingsPayload):
     return {"ok": True}
 
 @app.get("/api/test-telegram")
-async def test_telegram():
-    s = load_settings()
-    ok = await send_telegram(s.get("telegram_token",""), s.get("telegram_chat_id",""),
+async def test_telegram(token: str = "", chat_id: str = ""):
+    ok = await send_telegram(token, chat_id,
         "✅ <b>POD Renew Tool</b> — Kết nối Telegram thành công!")
     return {"ok": ok}
 
@@ -154,11 +153,11 @@ async def ws_process(ws: WebSocket):
         total = len(images)
         await send(type="start", total=total)
 
-        s   = load_settings()
-        tg_token  = s.get("telegram_token", "")
-        tg_chat   = s.get("telegram_chat_id", "")
-        app_url   = s.get("app_url", "").rstrip("/")
-        grok_cookie = s.get("grok_cookie", "")
+        # Settings sent from browser localStorage (persistent on client side)
+        tg_token    = data.get("telegram_token", "")
+        tg_chat     = data.get("telegram_chat_id", "")
+        app_url     = data.get("app_url", "").rstrip("/")
+        grok_cookie = data.get("grok_cookie", "")
 
         ok = fail = 0
         for i, img in enumerate(images):
