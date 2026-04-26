@@ -21,9 +21,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 /* Login */
 #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
 .login-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:380px;text-align:center}
-.login-logo{font-family:var(--mono);font-size:28px;font-weight:700;margin-bottom:6px}
-.login-logo span{color:var(--accent)}
-.login-sub{color:var(--muted);font-size:13px;margin-bottom:32px}
+.login-logo-img{width:130px;height:130px;border-radius:50%;object-fit:cover;margin-bottom:14px;border:3px solid #f59e0b;box-shadow:0 0 28px rgba(245,158,11,.35)}
+.login-tool-name{font-family:var(--mono);font-size:22px;font-weight:700;margin-bottom:6px}
+.login-tool-name span{color:var(--accent)}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:28px;line-height:1.7}
 .login-box input{width:100%;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:14px;outline:none;transition:border-color .2s;margin-bottom:12px}
 .login-box input:focus{border-color:var(--accent)}
 .btn-login{width:100%;padding:12px;background:var(--accent);border:none;border-radius:var(--r);color:#fff;font-family:var(--mono);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
@@ -200,9 +201,10 @@ textarea:focus{border-color:var(--accent)}
 
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo"><span>POD</span>.RENEW</div>
-    <div class="login-sub">AI T-Shirt Design Renewal Tool</div>
-    <input type="password" id="pw" placeholder="Nhập mật khẩu..." onkeydown="if(event.key==='Enter')doLogin()">
+    <img src="/static/logo.png" alt="TL Creative" class="login-logo-img">
+    <div class="login-tool-name"><span>POD</span>.RENEW</div>
+    <div class="login-sub">AI T-Shirt Design Renewal Tool<br><span style="color:#f59e0b;font-size:11px">by TL Creative</span></div>
+    <input type="password" id="pw" placeholder="Nhập mật khẩu truy cập..." onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn-login" onclick="doLogin()">ĐĂNG NHẬP</button>
     <div class="login-err" id="login-err">Sai mật khẩu!</div>
   </div>
