@@ -209,6 +209,7 @@ textarea:focus{border-color:var(--accent)}
       <div class="tabs">
         <div class="tab active" onclick="switchTab('log',this)">▸ Activity Log</div>
         <div class="tab" onclick="switchTab('results',this)">◈ Kết quả (<span id="res-cnt">0</span>)</div>
+        <div class="tab" onclick="switchTab('history',this)">🕘 Lịch sử</div>
       </div>
       <div class="log-panel active" id="tab-log"></div>
       <div class="results-panel" id="tab-results">
@@ -222,6 +223,16 @@ textarea:focus{border-color:var(--accent)}
     </div>
   </div>
 </div>
+
+
+      <div class="results-panel" id="tab-history">
+        <div class="res-actions" id="hist-actions" style="display:none">
+          <button class="btn-xs" onclick="dlAll()">⬇ Tải tất cả (ZIP)</button>
+          <button class="btn-xs" onclick="clearHistory()">🗑 Xoá lịch sử</button>
+        </div>
+        <div class="res-grid" id="hist-grid"></div>
+        <div class="empty-res" id="hist-empty"><span style="font-size:32px;opacity:.3">🕘</span>Chưa có lịch sử xử lý</div>
+      </div>
 
 <!-- Preview Modal -->
 <div id="preview-modal" onclick="if(event.target===this)closePreview()">
@@ -274,6 +285,7 @@ window.onload=()=>{
   }
   log('🚀 POD Renew Tool sẵn sàng.','info')
   log('   Thêm ảnh/folder → chọn preset → bấm Bắt Đầu.','dim')
+  loadHistory()
 }
 
 async function doLogin(){
@@ -388,7 +400,7 @@ function handleMsg(d,g,idx,res){
       log(`✅ ${d.filename}`,'ok')
       const ii=g.items.findIndex(it=>it.file.name===d.filename)
       if(ii>=0){g.items[ii].done=true;g.items[ii].result=d.result}
-      renderQ();addResult(d.result,d.filename)
+      renderQ();addResult(d.result,d.filename);loadHistory()
       break}
     case'fail':{
       document.getElementById('s-fail').textContent=parseInt(document.getElementById('s-fail').textContent)+1
@@ -475,6 +487,57 @@ function openPreview(filename,origName,url,orig){
 }
 function closePreview(){document.getElementById('preview-modal').classList.remove('open')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeDlg(false)}})
+
+// ─── History ─────────────────────────────────────────────────
+async function loadHistory(){
+  try{
+    const r=await fetch('/api/history')
+    const h=await r.json()
+    const grid=document.getElementById('hist-grid')
+    const empty=document.getElementById('hist-empty')
+    const actions=document.getElementById('hist-actions')
+    grid.innerHTML=''
+    if(!h.length){empty.style.display='flex';actions.style.display='none';return}
+    empty.style.display='none';actions.style.display='flex'
+    h.forEach(e=>{
+      const url=`/api/download/${e.result}`
+      const c=document.createElement('div');c.className='res-card'
+      c.onclick=()=>openPreview(e.result,e.original,url,'')
+      c.innerHTML=`
+        <div class="res-img-wrap">
+          <img class="res-img" src="${url}" alt="" onerror="this.style.opacity='.3'">
+          <div class="res-overlay">🔍</div>
+        </div>
+        <div class="res-info">
+          <div class="res-name" title="${e.original}">${e.original}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:5px">${e.timestamp}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e.prompt}">${e.prompt}</div>
+          <div style="display:flex;gap:4px">
+            <button class="btn-dl" style="flex:1" onclick="event.stopPropagation();dlFile('${e.result}')">⬇ Tải</button>
+            <button class="btn-dl" style="width:32px;color:var(--red)" onclick="event.stopPropagation();deleteHistItem('${e.result}',this.closest('.res-card'))">✕</button>
+          </div>
+        </div>`
+      grid.appendChild(c)
+    })
+  }catch(e){console.error(e)}
+}
+
+async function deleteHistItem(name,card){
+  await fetch(`/api/history/${name}`,{method:'DELETE'})
+  card.remove()
+  const grid=document.getElementById('hist-grid')
+  if(!grid.children.length){
+    document.getElementById('hist-empty').style.display='flex'
+    document.getElementById('hist-actions').style.display='none'
+  }
+}
+
+async function clearHistory(){
+  if(!confirm('Xoá toàn bộ lịch sử và ảnh kết quả?'))return
+  await fetch('/api/history',{method:'DELETE'})
+  loadHistory()
+}
+
 </script>
 </body>
 </html>
