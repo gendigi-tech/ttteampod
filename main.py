@@ -1,12 +1,11 @@
 """
-POD Renew Tool — Web App Backend
+POD Renew Tool — Web App Backend (with history)
 """
-import asyncio, base64, json, logging, os, re, time, zipfile, io
+import asyncio, base64, json, logging, os, time, zipfile, io
 from pathlib import Path
-from typing import Optional
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,53 +13,75 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-BASE    = Path(__file__).parent
-STATIC  = BASE / "static"
-RESULTS = BASE / "results"
+BASE      = Path(__file__).parent
+STATIC    = BASE / "static"
+RESULTS   = BASE / "results"
+HISTORY_F = BASE / "history.json"
 RESULTS.mkdir(exist_ok=True)
 
-ACCESS_PW = os.getenv("ACCESS_PASSWORD", "pod2024")   # đổi trong Railway env
+ACCESS_PW = os.getenv("ACCESS_PASSWORD", "pod2024")
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+
+# ── History helpers ───────────────────────────────────────────
+def load_history():
+    if HISTORY_F.exists():
+        try: return json.loads(HISTORY_F.read_text(encoding="utf-8"))
+        except: pass
+    return []
+
+def append_history(entry: dict):
+    h = load_history()
+    h.insert(0, entry)
+    HISTORY_F.write_text(json.dumps(h[:500], ensure_ascii=False, indent=2), encoding="utf-8")
 
 # ── Auth ─────────────────────────────────────────────────────
 @app.get("/api/auth")
 async def auth(password: str):
     return {"ok": password == ACCESS_PW}
 
-# ── Scan kết quả cũ ──────────────────────────────────────────
-@app.get("/api/results")
-async def list_results():
-    files = sorted(RESULTS.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
-    return [{"name": f.name, "size": f.stat().st_size} for f in files[:50]]
+# ── History ───────────────────────────────────────────────────
+@app.get("/api/history")
+async def get_history():
+    h = load_history()
+    return [e for e in h if (RESULTS / e["result"]).exists()]
 
-# ── Download ảnh đã xử lý ────────────────────────────────────
+@app.delete("/api/history/{result_name}")
+async def delete_one(result_name: str):
+    f = RESULTS / result_name
+    if f.exists(): f.unlink()
+    h = [e for e in load_history() if e["result"] != result_name]
+    HISTORY_F.write_text(json.dumps(h, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True}
+
+@app.delete("/api/history")
+async def clear_all_history():
+    for f in RESULTS.glob("*.png"): f.unlink()
+    HISTORY_F.write_text("[]", encoding="utf-8")
+    return {"ok": True}
+
+# ── Download ─────────────────────────────────────────────────
 @app.get("/api/download/{filename}")
 async def download(filename: str):
     f = RESULTS / filename
-    if not f.exists():
-        raise HTTPException(404, "File not found")
+    if not f.exists(): raise HTTPException(404, "Not found")
     return FileResponse(str(f), media_type="image/png",
                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
-# ── Download tất cả dưới dạng ZIP ────────────────────────────
 @app.get("/api/download-all")
 async def download_all():
     files = list(RESULTS.glob("*.png"))
-    if not files:
-        raise HTTPException(404, "No results")
+    if not files: raise HTTPException(404, "No results")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
-            zf.write(f, f.name)
+        for f in files: zf.write(f, f.name)
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="pod_results.zip"'})
 
-# ── WebSocket: xử lý batch ───────────────────────────────────
+# ── WebSocket processing ──────────────────────────────────────
 @app.websocket("/ws/process")
 async def ws_process(ws: WebSocket):
     await ws.accept()
@@ -69,108 +90,79 @@ async def ws_process(ws: WebSocket):
         await ws.send_text(json.dumps(kw))
 
     try:
-        raw  = await ws.receive_text()
-        data = json.loads(raw)
-
+        data      = json.loads(await ws.receive_text())
         api_key   = data.get("api_key", "")
         prompt    = data.get("prompt", "")
-        images_b64= data.get("images", [])   # list of {name, data (base64), type}
+        images    = data.get("images", [])
 
-        if not api_key:
-            await send(type="error", message="Chưa nhập API key!"); return
-        if not prompt:
-            await send(type="error", message="Chưa nhập prompt!"); return
-        if not images_b64:
-            await send(type="error", message="Chưa chọn ảnh!"); return
+        if not api_key: await send(type="error", message="Chưa nhập API key!"); return
+        if not prompt:  await send(type="error", message="Chưa nhập prompt!"); return
+        if not images:  await send(type="error", message="Chưa chọn ảnh!"); return
 
-        total = len(images_b64)
+        total = len(images)
         await send(type="start", total=total)
 
         ok = fail = 0
-        results = []
-
-        for i, img_data in enumerate(images_b64):
-            name    = img_data["name"]
-            raw_b64 = img_data["data"]
-            mt      = img_data.get("type", "image/jpeg")
-
-            await send(type="progress", current=i+1, total=total,
-                       filename=name, message=f"[{i+1}/{total}] → {name}")
-
+        for i, img in enumerate(images):
+            name = img["name"]
+            await send(type="progress", current=i+1, total=total, filename=name)
             try:
                 out_b64, out_name = await process_image(
-                    raw_b64, mt, name, prompt, api_key, ws, send)
+                    img["data"], img.get("type","image/jpeg"),
+                    name, prompt, api_key, send)
 
                 if out_b64:
-                    # Lưu vào results/
                     out_path = RESULTS / out_name
                     out_path.write_bytes(base64.b64decode(out_b64))
                     ok += 1
-                    results.append(out_name)
-                    await send(type="success", filename=name,
-                               result=out_name,
-                               preview=f"data:image/png;base64,{out_b64[:200]}...",
-                               message=f"✅ Xong: {name}")
+                    # ── Lưu vào lịch sử ──
+                    append_history({
+                        "id":        f"{int(time.time()*1000)}-{i}",
+                        "timestamp": time.strftime("%d/%m/%Y %H:%M"),
+                        "original":  name,
+                        "result":    out_name,
+                        "prompt":    prompt[:120],
+                    })
+                    await send(type="success", filename=name, result=out_name)
                 else:
                     fail += 1
-                    await send(type="fail", filename=name,
-                               message=f"❌ Thất bại: {name}")
+                    await send(type="fail", filename=name, message=f"❌ Thất bại: {name}")
 
             except Exception as e:
                 fail += 1
-                await send(type="fail", filename=name,
-                           message=f"❌ Lỗi: {name} — {str(e)[:100]}")
+                await send(type="fail", filename=name, message=f"❌ Lỗi: {name} — {str(e)[:100]}")
 
             if i < total - 1:
                 await asyncio.sleep(1)
 
-        await send(type="done", ok=ok, fail=fail, total=total,
-                   results=results,
-                   message=f"🎉 Hoàn thành! {ok}/{total} ảnh thành công.")
+        await send(type="done", ok=ok, fail=fail, total=total)
 
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect: pass
     except Exception as e:
         log.error(e)
         try: await ws.send_text(json.dumps({"type":"error","message":str(e)}))
         except: pass
 
-# ── Image processing logic ────────────────────────────────────
-async def process_image(b64, mt, name, prompt, api_key, ws, send):
-    headers = {"Authorization": f"Bearer {api_key}",
-               "Content-Type": "application/json"}
-
-    stem     = Path(name).stem
-    out_name = f"{stem}_renewed.png"
+# ── Image processing ──────────────────────────────────────────
+async def process_image(b64, mt, name, prompt, api_key, send):
+    headers  = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    out_name = f"{Path(name).stem}_renewed.png"
 
     async with httpx.AsyncClient(timeout=180) as c:
-
-        # Dùng /images/edits — gửi ảnh gốc + prompt, AI chỉnh trực tiếp
         await send(type="log", message="  ✏️  Gửi ảnh gốc để chỉnh sửa...")
-
-        r = await c.post(
-            "https://api.x.ai/v1/images/edits",
-            headers=headers,
-            json={
-                "model": "grok-imagine-image",
-                "prompt": prompt,
-                "image": {
-                    "type": "image_url",
-                    "url": f"data:{mt};base64,{b64}"
-                }
-            }
-        )
-
+        r = await c.post("https://api.x.ai/v1/images/edits", headers=headers, json={
+            "model": "grok-imagine-image",
+            "prompt": prompt,
+            "image": {"type": "image_url", "url": f"data:{mt};base64,{b64}"}
+        })
         if r.status_code != 200:
             raise Exception(f"Edit API lỗi {r.status_code}: {r.text[:200]}")
 
         item    = r.json()["data"][0]
         out_b64 = item.get("b64_json")
-
         if not out_b64:
-            url = item.get("url", "")
-            if not url:
-                raise Exception("API không trả về ảnh")
+            url = item.get("url","")
+            if not url: raise Exception("API không trả về ảnh")
             dl      = await c.get(url, timeout=60)
             out_b64 = base64.b64encode(dl.content).decode()
 
@@ -183,5 +175,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
