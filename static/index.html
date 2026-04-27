@@ -395,9 +395,16 @@ textarea:focus{border-color:var(--accent)}
         </div>
 
         <!-- Products table -->
-        <div id="woo-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:180px;color:var(--muted);gap:8px;font-size:13px">
-          <span style="font-size:32px;opacity:.3">🛒</span>
-          Chưa có sản phẩm. Xử lý ảnh xong → AI sẽ phân tích để listing.
+        <!-- Direct upload to WooCommerce -->
+        <div style="margin-bottom:12px">
+          <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:var(--bg3);border:1.5px dashed var(--border2);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);transition:all .2s" id="woo-upload-label">
+            📁 Thêm ảnh trực tiếp vào WooCommerce (không cần qua bước Renew)
+            <input type="file" multiple accept="image/*" id="woo-direct-upload" style="display:none">
+          </label>
+        </div>
+        <div id="woo-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:120px;color:var(--muted);gap:8px;font-size:13px">
+          <span style="font-size:28px;opacity:.3">🛒</span>
+          Chưa có sản phẩm. Upload ảnh ở trên hoặc renew ảnh trước.
         </div>
 
         <div id="woo-table" style="display:none">
@@ -826,6 +833,8 @@ function addResult(filename,origName){
       <button class="btn-dl" onclick="event.stopPropagation();dlFile('${filename}')">⬇ Tải về</button>
     </div>`
   document.getElementById('res-grid').prepend(c)
+  // Auto-add to WooCommerce queue
+  if(typeof addToWooQueue === 'function') addToWooQueue(filename, origName)
   document.querySelectorAll('.tab')[1].click()
   // Lưu vào localStorage (persistent)
   const h=JSON.parse(localStorage.getItem('pod_history')||'[]')
@@ -1011,6 +1020,36 @@ async function initWooTab(){
   if(s.consumer_key)    document.getElementById('woo-ck').value = s.consumer_key
   if(s.consumer_secret) document.getElementById('woo-cs').value = s.consumer_secret
 
+  // Direct upload handler
+  const directUpload = document.getElementById('woo-direct-upload')
+  if(directUpload){
+    directUpload.addEventListener('change', async function(){
+      const files = Array.from(this.files).filter(f=>f.type.startsWith('image/'))
+      if(!files.length) return
+      for(const file of files){
+        const b64 = await new Promise((res,rej)=>{
+          const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file)
+        })
+        // Store b64 in memory, create fake resultName
+        const fakeName = 'direct_' + Date.now() + '_' + file.name
+        // Save to results folder via API
+        const uploadResp = await fetch('/api/woo/upload-direct', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({filename: file.name, b64, mime_type: file.type})
+        })
+        const uploadData = await uploadResp.json()
+        if(uploadData.ok){
+          addToWooQueue(uploadData.result_name, file.name, b64, file.type)
+        }
+      }
+      this.value=''
+      renderWooTable()
+    })
+    const label = document.getElementById('woo-upload-label')
+    if(label){ label.addEventListener('dragover', e=>{e.preventDefault();label.style.borderColor='var(--accent)'}); label.addEventListener('dragleave',()=>label.style.borderColor=''); }
+  }
+
   document.getElementById('btn-woo-settings-open').addEventListener('click',()=>{
     const bar = document.getElementById('woo-settings-bar')
     bar.style.display = bar.style.display==='none' ? 'block' : 'none'
@@ -1043,12 +1082,12 @@ async function testWooConnection(){
 }
 
 // ── Add result images to woo queue ───────────────────────────
-function addToWooQueue(resultName, origName){
+function addToWooQueue(resultName, origName, imageB64, imageType){
   if(wooProducts.find(p=>p.resultName===resultName)) return
   const prod = {
     id: Date.now()+Math.random(),
     resultName, imageName: origName,
-    imageB64: null, imageType: 'image/jpeg',
+    imageB64: imageB64||null, imageType: imageType||'image/jpeg',
     name: origName.replace(/\.[^.]+$/,'').replace(/[-_]/g,' '),
     short_description: '', description: '',
     categories: ['T-Shirts'], tags: [],
@@ -1210,12 +1249,7 @@ async function exportWooCSV(){
   a.click()
 }
 
-// ── Hook: auto-add to woo queue when image processed ─────────
-const _origAddResult = addResult
-function addResult(filename, origName){
-  _origAddResult(filename, origName)
-  addToWooQueue(filename, origName)
-}
+// WooCommerce hook is now inside addResult directly
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeSettings();closeAdmin();closeDlg(false)}})
 </script>
