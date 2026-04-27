@@ -812,7 +812,7 @@ function log(msg,cls=''){
 function switchTab(id,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))
   document.querySelectorAll('.log-panel,.results-panel').forEach(p=>p.classList.remove('active'))
-  el.classList.add('active');document.getElementById(`tab-${id}`).classList.add('active');if(id==='woo')initWooTab()
+  el.classList.add('active');document.getElementById(`tab-${id}`).classList.add('active');if(id==='woo')setTimeout(initWooTab,0)
 }
 
 // ── Results ───────────────────────────────────────────────────
@@ -833,8 +833,6 @@ function addResult(filename,origName){
       <button class="btn-dl" onclick="event.stopPropagation();dlFile('${filename}')">⬇ Tải về</button>
     </div>`
   document.getElementById('res-grid').prepend(c)
-  // Auto-add to WooCommerce queue
-  if(typeof addToWooQueue === 'function') addToWooQueue(filename, origName)
   document.querySelectorAll('.tab')[1].click()
   // Lưu vào localStorage (persistent)
   const h=JSON.parse(localStorage.getItem('pod_history')||'[]')
@@ -847,6 +845,8 @@ function addResult(filename,origName){
   })
   localStorage.setItem('pod_history', JSON.stringify(h.slice(0,300)))
   loadHistory()
+  // Woo queue — after everything else so errors here don't block results
+  try{ if(typeof addToWooQueue==='function') addToWooQueue(filename,origName) }catch(e){}
 }
 function dlFile(n){const a=document.createElement('a');a.href=`/api/download/${n}`;a.download=n;a.click()}
 function dlAll(){window.location.href='/api/download-all'}
@@ -1014,7 +1014,10 @@ window._adminPass = localStorage.getItem('xai_key') ? '' : ''
 let wooProducts = []   // {id, resultName, imageName, imageB64, imageType, name, short_description, description, categories, tags, sku, price, status, analyzed}
 
 // ── Init WooCommerce tab ──────────────────────────────────────
+let _wooTabInited = false
 async function initWooTab(){
+  if(_wooTabInited) return
+  _wooTabInited = true
   const s = await fetch('/api/woo/settings').then(r=>r.json()).catch(()=>({}))
   if(s.url)  document.getElementById('woo-url').value = s.url
   if(s.consumer_key)    document.getElementById('woo-ck').value = s.consumer_key
