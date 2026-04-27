@@ -281,6 +281,7 @@ textarea:focus{border-color:var(--accent)}
         <div class="tab active" onclick="switchTab('log',this)">▸ Activity Log</div>
         <div class="tab" onclick="switchTab('results',this)">◈ Kết quả (<span id="res-cnt">0</span>)</div>
         <div class="tab" onclick="switchTab('history',this)">🕘 Lịch sử</div>
+        <div class="tab" onclick="switchTab('woo',this)">🛒 WooCommerce</div>
       </div>
       <div class="log-panel active" id="tab-log"></div>
 
@@ -351,6 +352,70 @@ textarea:focus{border-color:var(--accent)}
     </div>
   </div>
 </div>
+
+      <!-- WooCommerce Tab -->
+      <div class="results-panel" id="tab-woo">
+        <div id="woo-toolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted);font-family:var(--mono)">Chọn ảnh từ Kết quả để listing</span>
+          <button class="btn-xs" id="btn-woo-analyze" style="background:rgba(124,107,255,.1);border-color:var(--accent);color:var(--accent)">⚡ AI Phân tích tất cả</button>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <select id="woo-status" style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;padding:5px 8px;font-family:var(--mono);outline:none">
+              <option value="draft">Draft (ẩn)</option>
+              <option value="publish">Publish (public)</option>
+            </select>
+            <button class="btn-xs" id="btn-woo-publish" style="background:var(--green);border-color:var(--green);color:#fff">🚀 Đăng lên WooCommerce</button>
+            <button class="btn-xs" id="btn-woo-csv">📥 Xuất CSV</button>
+            <button class="btn-xs" id="btn-woo-settings-open">⚙️ Cài đặt WooCommerce</button>
+          </div>
+        </div>
+
+        <!-- WooCommerce settings bar (inline) -->
+        <div id="woo-settings-bar" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">Cài đặt WooCommerce</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div>
+              <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:4px">WEBSITE URL</label>
+              <input type="text" id="woo-url" placeholder="https://yoursite.com" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:4px">CONSUMER KEY</label>
+              <input type="password" id="woo-ck" placeholder="ck_xxxxxxxx" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:4px">CONSUMER SECRET</label>
+              <input type="password" id="woo-cs" placeholder="cs_xxxxxxxx" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-xs" id="btn-woo-save" style="background:var(--accent);color:#fff;border-color:var(--accent)">💾 Lưu</button>
+            <button class="btn-xs" id="btn-woo-test">🔌 Test kết nối</button>
+            <span id="woo-test-result" style="font-size:11px;font-family:var(--mono)"></span>
+            <a href="https://woocommerce.com/document/woocommerce-rest-api/" target="_blank" style="font-size:11px;color:var(--accent);margin-left:auto">Cách lấy API key →</a>
+          </div>
+        </div>
+
+        <!-- Products table -->
+        <div id="woo-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:180px;color:var(--muted);gap:8px;font-size:13px">
+          <span style="font-size:32px;opacity:.3">🛒</span>
+          Chưa có sản phẩm. Xử lý ảnh xong → AI sẽ phân tích để listing.
+        </div>
+
+        <div id="woo-table" style="display:none">
+          <div style="display:grid;grid-template-columns:80px 1fr 160px 90px 120px 100px 80px;gap:6px;font-size:10px;color:var(--muted);font-family:var(--mono);padding:0 4px;margin-bottom:6px;letter-spacing:1px">
+            <span>ẢNH</span><span>TÊN SẢN PHẨM</span><span>DANH MỤC / TAGS</span>
+            <span>GIÁ (USD)</span><span>SKU</span><span>TRẠNG THÁI</span><span>XOÁ</span>
+          </div>
+          <div id="woo-rows"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 4px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">
+            <span id="woo-count">0 sản phẩm</span>
+            <span>·</span>
+            <span id="woo-ok-count" style="color:var(--green)">0 đã đăng</span>
+            <span>·</span>
+            <span id="woo-fail-count" style="color:var(--red)">0 lỗi</span>
+          </div>
+        </div>
+      </div>
+
 <!-- Preview Modal -->
 <div class="overlay" id="preview-modal" onclick="if(event.target===this)closePreview()">
   <div class="modal-box">
@@ -740,7 +805,7 @@ function log(msg,cls=''){
 function switchTab(id,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))
   document.querySelectorAll('.log-panel,.results-panel').forEach(p=>p.classList.remove('active'))
-  el.classList.add('active');document.getElementById(`tab-${id}`).classList.add('active')
+  el.classList.add('active');document.getElementById(`tab-${id}`).classList.add('active');if(id==='woo')initWooTab()
 }
 
 // ── Results ───────────────────────────────────────────────────
@@ -932,6 +997,225 @@ async function deleteUser(username){
 
 // Init admin password cache from localStorage
 window._adminPass = localStorage.getItem('xai_key') ? '' : ''
+
+
+// ══════════════════════════════════════════════════════════════
+// WOOCOMMERCE MODULE
+// ══════════════════════════════════════════════════════════════
+let wooProducts = []   // {id, resultName, imageName, imageB64, imageType, name, short_description, description, categories, tags, sku, price, status, analyzed}
+
+// ── Init WooCommerce tab ──────────────────────────────────────
+async function initWooTab(){
+  const s = await fetch('/api/woo/settings').then(r=>r.json()).catch(()=>({}))
+  if(s.url)  document.getElementById('woo-url').value = s.url
+  if(s.consumer_key)    document.getElementById('woo-ck').value = s.consumer_key
+  if(s.consumer_secret) document.getElementById('woo-cs').value = s.consumer_secret
+
+  document.getElementById('btn-woo-settings-open').addEventListener('click',()=>{
+    const bar = document.getElementById('woo-settings-bar')
+    bar.style.display = bar.style.display==='none' ? 'block' : 'none'
+  })
+  document.getElementById('btn-woo-save').addEventListener('click', saveWooSettings)
+  document.getElementById('btn-woo-test').addEventListener('click', testWooConnection)
+  document.getElementById('btn-woo-analyze').addEventListener('click', analyzeAllProducts)
+  document.getElementById('btn-woo-publish').addEventListener('click', publishToWoo)
+  document.getElementById('btn-woo-csv').addEventListener('click', exportWooCSV)
+}
+
+async function saveWooSettings(){
+  const payload = {
+    url: document.getElementById('woo-url').value.trim(),
+    consumer_key: document.getElementById('woo-ck').value.trim(),
+    consumer_secret: document.getElementById('woo-cs').value.trim(),
+  }
+  await fetch('/api/woo/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+  document.getElementById('woo-test-result').textContent = '✅ Đã lưu'
+  document.getElementById('woo-test-result').style.color = 'var(--green)'
+}
+
+async function testWooConnection(){
+  const el = document.getElementById('woo-test-result')
+  el.textContent = 'Đang kiểm tra...'; el.style.color = 'var(--muted)'
+  await saveWooSettings()
+  const r = await fetch('/api/woo/test').then(d=>d.json())
+  el.textContent = r.ok ? '✅ Kết nối thành công!' : `❌ Lỗi: ${r.error}`
+  el.style.color = r.ok ? 'var(--green)' : 'var(--red)'
+}
+
+// ── Add result images to woo queue ───────────────────────────
+function addToWooQueue(resultName, origName){
+  if(wooProducts.find(p=>p.resultName===resultName)) return
+  const prod = {
+    id: Date.now()+Math.random(),
+    resultName, imageName: origName,
+    imageB64: null, imageType: 'image/jpeg',
+    name: origName.replace(/\.[^.]+$/,'').replace(/[-_]/g,' '),
+    short_description: '', description: '',
+    categories: ['T-Shirts'], tags: [],
+    sku: 'POD-' + Date.now()%10000,
+    price: '', status: 'pending', analyzed: false
+  }
+  wooProducts.push(prod)
+  renderWooTable()
+}
+
+function renderWooTable(){
+  const empty = document.getElementById('woo-empty')
+  const table = document.getElementById('woo-table')
+  const rows  = document.getElementById('woo-rows')
+  const count = document.getElementById('woo-count')
+
+  if(!wooProducts.length){ empty.style.display='flex'; table.style.display='none'; return }
+  empty.style.display='none'; table.style.display='block'
+  count.textContent = wooProducts.length + ' sản phẩm'
+
+  rows.innerHTML = ''
+  wooProducts.forEach((p,i) => {
+    const imgSrc = `/api/download/${p.resultName}`
+    const statusColor = p.status==='published'?'var(--green)':p.status==='error'?'var(--red)':p.status==='analyzing'?'var(--amber)':'var(--muted)'
+    const statusText  = p.status==='published'?'✅ Đã đăng':p.status==='error'?'❌ Lỗi':p.status==='analyzing'?'⏳ Đang phân tích':'⏸ Chờ'
+    const row = document.createElement('div')
+    row.id = 'woo-row-'+i
+    row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 160px 90px 120px 100px 80px;gap:6px;align-items:start;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px'
+    row.innerHTML = `
+      <img src="${imgSrc}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="openPreview('${p.resultName}','${p.imageName}','${imgSrc}','')">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <input value="${p.name}" placeholder="Tên sản phẩm" data-idx="${i}" data-field="name"
+          style="width:100%;padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;outline:none" class="woo-input">
+        <textarea placeholder="Mô tả ngắn..." data-idx="${i}" data-field="short_description" rows="2"
+          style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;resize:none;outline:none;font-family:var(--mono)" class="woo-input">${p.short_description}</textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <input value="${p.categories.join(', ')}" placeholder="T-Shirts, Hoodies..." data-idx="${i}" data-field="categories_str"
+          style="width:100%;padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;outline:none" class="woo-input">
+        <input value="${p.tags.join(', ')}" placeholder="tags..." data-idx="${i}" data-field="tags_str"
+          style="width:100%;padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;outline:none" class="woo-input">
+      </div>
+      <input type="number" value="${p.price}" placeholder="0.00" data-idx="${i}" data-field="price" min="0" step="0.01"
+        style="padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;outline:none;width:100%;${!p.price?'border-color:var(--amber)':''}" class="woo-input">
+      <input value="${p.sku}" data-idx="${i}" data-field="sku"
+        style="padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;outline:none;width:100%;font-family:var(--mono)" class="woo-input">
+      <div style="font-size:11px;font-family:var(--mono);color:${statusColor};padding-top:4px">${statusText}</div>
+      <button style="padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;font-size:11px" data-del="${i}">✕</button>`
+    rows.appendChild(row)
+  })
+
+  // Events
+  rows.querySelectorAll('.woo-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const i = parseInt(e.target.dataset.idx)
+      const f = e.target.dataset.field
+      if(f==='categories_str') wooProducts[i].categories = e.target.value.split(',').map(x=>x.trim()).filter(Boolean)
+      else if(f==='tags_str')  wooProducts[i].tags = e.target.value.split(',').map(x=>x.trim()).filter(Boolean)
+      else wooProducts[i][f] = e.target.value
+    })
+  })
+  rows.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      wooProducts.splice(parseInt(e.target.dataset.del), 1)
+      renderWooTable()
+    })
+  })
+}
+
+// ── AI Analyze ────────────────────────────────────────────────
+async function analyzeAllProducts(){
+  const key = document.getElementById('api-key').value.trim()
+  if(!key){ alert('Cần nhập xAI API key ở góc trên bên phải!'); return }
+
+  const toAnalyze = wooProducts.filter(p=>!p.analyzed)
+  if(!toAnalyze.length){ alert('Tất cả đã được phân tích rồi!'); return }
+
+  for(let i=0; i<wooProducts.length; i++){
+    const p = wooProducts[i]
+    if(p.analyzed) continue
+    p.status = 'analyzing'; renderWooTable()
+
+    try {
+      // Fetch image as b64
+      const resp = await fetch(`/api/download/${p.resultName}`)
+      const buf  = await resp.arrayBuffer()
+      const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)))
+
+      const r = await fetch('/api/woo/analyze', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({image_b64:b64, image_name:p.imageName, api_key:key})
+      })
+      const d = await r.json()
+
+      if(d.ok && d.data){
+        wooProducts[i] = {...p, ...d.data, imageB64:b64,
+          analyzed:true, status:'pending',
+          price: p.price || ''}
+      } else {
+        wooProducts[i].status = 'error'
+      }
+    } catch(e) {
+      wooProducts[i].status = 'error'
+    }
+    renderWooTable()
+    await new Promise(r=>setTimeout(r,500))
+  }
+}
+
+// ── Publish to WooCommerce ────────────────────────────────────
+async function publishToWoo(){
+  const missing = wooProducts.filter(p=>!p.price)
+  if(missing.length){ alert(`${missing.length} sản phẩm chưa điền giá! Vui lòng điền giá trước.`); return }
+
+  const status = document.getElementById('woo-status').value
+  if(!confirm(`Đăng ${wooProducts.length} sản phẩm lên WooCommerce (${status})?`)) return
+
+  // Fetch b64 for products not yet analyzed
+  const products = await Promise.all(wooProducts.map(async p => {
+    let b64 = p.imageB64
+    if(!b64){
+      const resp = await fetch(`/api/download/${p.resultName}`)
+      const buf  = await resp.arrayBuffer()
+      b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+    }
+    return {...p, image_b64:b64, image_name:p.resultName, image_type:'image/png'}
+  }))
+
+  const r = await fetch('/api/woo/publish', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({products, status})
+  })
+  const d = await r.json()
+
+  if(d.results){
+    d.results.forEach((res,i)=>{
+      if(wooProducts[i]) wooProducts[i].status = res.ok ? 'published' : 'error'
+    })
+    renderWooTable()
+    document.getElementById('woo-ok-count').textContent   = d.published + ' đã đăng'
+    document.getElementById('woo-fail-count').textContent = d.failed + ' lỗi'
+    alert(`✅ ${d.published}/${d.results.length} sản phẩm đã đăng thành công!${d.failed?' \n❌ ' + d.failed + ' lỗi.':''}`)
+  }
+}
+
+// ── Export CSV ────────────────────────────────────────────────
+async function exportWooCSV(){
+  if(!wooProducts.length){ alert('Chưa có sản phẩm!'); return }
+  const status = document.getElementById('woo-status').value
+  const products = wooProducts.map(p=>({...p}))
+  const r = await fetch('/api/woo/export-csv', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({products, status})
+  })
+  const blob = await r.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'woocommerce_products.csv'
+  a.click()
+}
+
+// ── Hook: auto-add to woo queue when image processed ─────────
+const _origAddResult = addResult
+function addResult(filename, origName){
+  _origAddResult(filename, origName)
+  addToWooQueue(filename, origName)
+}
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeSettings();closeAdmin();closeDlg(false)}})
 </script>
