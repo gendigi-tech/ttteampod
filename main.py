@@ -241,6 +241,24 @@ async def process_api(b64, mt, name, prompt, api_key, send):
             out_b64 = base64.b64encode(dl.content).decode()
         return out_b64, out_name
 
+
+class DirectUpload(BaseModel):
+    filename: str
+    b64: str
+    mime_type: str = "image/jpeg"
+
+@app.post("/api/woo/upload-direct")
+async def woo_upload_direct(payload: DirectUpload):
+    """Save directly uploaded image to results folder"""
+    try:
+        ext = Path(payload.filename).suffix or ".jpg"
+        out_name = f"direct_{int(time.time()*1000)}{ext}"
+        out_path = RESULTS / out_name
+        out_path.write_bytes(base64.b64decode(payload.b64))
+        return {"ok": True, "result_name": out_name}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @app.get("/")
 async def root(): return FileResponse(str(STATIC / "index.html"))
 
