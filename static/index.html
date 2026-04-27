@@ -596,7 +596,7 @@ function handleMsg(d,g,idx,res){
       log(`✅ ${d.filename}`,'ok')
       const ii=g.items.findIndex(it=>it.file.name===d.filename)
       if(ii>=0){g.items[ii].done=true;g.items[ii].result=d.result}
-      renderQ();addResult(d.result,d.filename);loadHistory()
+      renderQ();addResult(d.result,d.filename)
       break}
     case'fail':
       document.getElementById('s-fail').textContent=parseInt(document.getElementById('s-fail').textContent)+1
@@ -677,10 +677,17 @@ function addResult(filename,origName){
     </div>`
   document.getElementById('res-grid').prepend(c)
   document.querySelectorAll('.tab')[1].click()
-  // Save to localStorage history
+  // Lưu vào localStorage (persistent)
   const h=JSON.parse(localStorage.getItem('pod_history')||'[]')
-  h.unshift({result:filename,original:origName,timestamp:new Date().toLocaleString('vi-VN'),prompt:document.getElementById('prompt').value.slice(0,80)})
-  localStorage.setItem('pod_history',JSON.stringify(h.slice(0,200)))
+  h.unshift({
+    result: filename,
+    original: origName,
+    timestamp: new Date().toLocaleString('vi-VN'),
+    prompt: document.getElementById('prompt').value.trim().slice(0,100),
+    folder: ''
+  })
+  localStorage.setItem('pod_history', JSON.stringify(h.slice(0,300)))
+  loadHistory()
 }
 function dlFile(n){const a=document.createElement('a');a.href=`/api/download/${n}`;a.download=n;a.click()}
 function dlAll(){window.location.href='/api/download-all'}
@@ -699,9 +706,8 @@ function closePreview(){document.getElementById('preview-modal').classList.remov
 // ── History ───────────────────────────────────────────────────
 async function loadHistory(){
   try{
-    // Load from localStorage first (persistent), then enrich with server data
-    const localH=JSON.parse(localStorage.getItem('pod_history')||'[]')
-    const h=localH
+    // Load từ localStorage (luôn có dù server reset)
+    const h=JSON.parse(localStorage.getItem('pod_history')||'[]')
     const grid=document.getElementById('hist-grid')
     const empty=document.getElementById('hist-empty')
     const actions=document.getElementById('hist-actions')
