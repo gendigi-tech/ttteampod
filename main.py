@@ -247,3 +247,229 @@ async def root(): return FileResponse(str(STATIC / "index.html"))
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+
+# ══════════════════════════════════════════════════════════════
+# WOOCOMMERCE INTEGRATION
+# ══════════════════════════════════════════════════════════════
+
+import re as _re
+
+WOO_SETTINGS_F = BASE / "woo_settings.json"
+
+def load_woo_settings():
+    if WOO_SETTINGS_F.exists():
+        try: return json.loads(WOO_SETTINGS_F.read_text(encoding="utf-8"))
+        except: pass
+    return {"url": "", "consumer_key": "", "consumer_secret": ""}
+
+def save_woo_settings(data):
+    WOO_SETTINGS_F.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+class WooSettings(BaseModel):
+    url: str = ""
+    consumer_key: str = ""
+    consumer_secret: str = ""
+
+@app.get("/api/woo/settings")
+async def get_woo_settings():
+    return load_woo_settings()
+
+@app.post("/api/woo/settings")
+async def post_woo_settings(payload: WooSettings):
+    s = payload.dict()
+    s["url"] = s["url"].rstrip("/")
+    save_woo_settings(s)
+    return {"ok": True}
+
+@app.get("/api/woo/test")
+async def test_woo():
+    s = load_woo_settings()
+    if not s["url"] or not s["consumer_key"]:
+        return {"ok": False, "error": "Chưa cấu hình WooCommerce"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(
+                f"{s['url']}/wp-json/wc/v3/products?per_page=1",
+                auth=(s["consumer_key"], s["consumer_secret"])
+            )
+            return {"ok": r.status_code == 200, "status": r.status_code,
+                    "error": r.text[:120] if r.status_code != 200 else ""}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+class AnalyzeRequest(BaseModel):
+    image_b64: str
+    image_name: str
+    api_key: str
+
+@app.post("/api/woo/analyze")
+async def woo_analyze(payload: AnalyzeRequest):
+    """Dùng xAI vision để phân tích ảnh → gợi ý thông tin sản phẩm"""
+    if not payload.api_key:
+        return {"ok": False, "error": "Cần API key xAI"}
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {payload.api_key}",
+                         "Content-Type": "application/json"},
+                json={
+                    "model": "grok-2-vision-1212",
+                    "messages": [{"role": "user", "content": [
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:image/jpeg;base64,{payload.image_b64}"}},
+                        {"type": "text", "text": (
+                            "This is a print-on-demand t-shirt product image. "
+                            "Analyze it and respond ONLY with a JSON object (no markdown, no explanation):\n"
+                            '{"name":"product name in English (max 60 chars)",'
+                            '"short_description":"1-2 sentence description",'
+                            '"description":"2-3 paragraph HTML description for WooCommerce",'
+                            '"categories":["Main Category","Sub Category"],'
+                            '"tags":["tag1","tag2","tag3","tag4","tag5"],'
+                            '"sku_hint":"2-3 word slug, lowercase, hyphens"}'
+                        )}
+                    ]}],
+                    "max_tokens": 600,
+                }
+            )
+        if r.status_code != 200:
+            return {"ok": False, "error": f"Vision API {r.status_code}"}
+        text = r.json()["choices"][0]["message"]["content"].strip()
+        # Strip markdown code fences if present
+        text = _re.sub(r"```(?:json)?|```", "", text).strip()
+        data = json.loads(text)
+        # Build SKU from filename + hint
+        stem = Path(payload.image_name).stem
+        slug = data.get("sku_hint", stem).lower()
+        slug = _re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+        data["sku"] = f"POD-{slug}-{int(time.time()) % 10000}"
+        return {"ok": True, "data": data}
+    except json.JSONDecodeError:
+        # Vision returned something but not valid JSON — extract what we can
+        return {"ok": True, "data": {
+            "name": Path(payload.image_name).stem.replace("_", " ").title(),
+            "short_description": "Print-on-demand t-shirt design.",
+            "description": "<p>High-quality print-on-demand t-shirt.</p>",
+            "categories": ["T-Shirts"],
+            "tags": ["t-shirt", "print-on-demand"],
+            "sku": f"POD-{int(time.time()) % 10000}"
+        }}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+class PublishRequest(BaseModel):
+    products: list
+    status: str = "draft"   # draft | publish
+
+@app.post("/api/woo/publish")
+async def woo_publish(payload: PublishRequest):
+    """Đăng sản phẩm lên WooCommerce qua REST API"""
+    s = load_woo_settings()
+    if not s["url"] or not s["consumer_key"]:
+        return {"ok": False, "error": "Chưa cấu hình WooCommerce"}
+
+    auth = (s["consumer_key"], s["consumer_secret"])
+    base_url = s["url"]
+    results = []
+
+    async with httpx.AsyncClient(timeout=60) as c:
+        for prod in payload.products:
+            try:
+                image_url = None
+
+                # 1. Upload ảnh lên WP Media Library (nếu có b64)
+                if prod.get("image_b64"):
+                    img_bytes = base64.b64decode(prod["image_b64"])
+                    fname = prod.get("image_name", "product.jpg")
+                    media_r = await c.post(
+                        f"{base_url}/wp-json/wp/v2/media",
+                        auth=auth,
+                        headers={
+                            "Content-Disposition": f'attachment; filename="{fname}"',
+                            "Content-Type": prod.get("image_type", "image/jpeg"),
+                        },
+                        content=img_bytes,
+                        timeout=60
+                    )
+                    if media_r.status_code in (200, 201):
+                        image_url = media_r.json().get("source_url", "")
+
+                # 2. Tạo sản phẩm
+                product_data = {
+                    "name": prod.get("name", ""),
+                    "type": "simple",
+                    "status": payload.status,
+                    "short_description": prod.get("short_description", ""),
+                    "description": prod.get("description", ""),
+                    "sku": prod.get("sku", ""),
+                    "regular_price": str(prod.get("price", "")),
+                    "categories": [{"name": c} for c in prod.get("categories", [])],
+                    "tags": [{"name": t} for t in prod.get("tags", [])],
+                }
+                if image_url:
+                    product_data["images"] = [{"src": image_url}]
+
+                prod_r = await c.post(
+                    f"{base_url}/wp-json/wc/v3/products",
+                    auth=auth,
+                    json=product_data
+                )
+                if prod_r.status_code in (200, 201):
+                    pid = prod_r.json().get("id")
+                    link = prod_r.json().get("permalink", "")
+                    results.append({"ok": True, "name": prod.get("name"),
+                                    "id": pid, "link": link})
+                else:
+                    results.append({"ok": False, "name": prod.get("name"),
+                                    "error": prod_r.text[:120]})
+            except Exception as e:
+                results.append({"ok": False, "name": prod.get("name","?"),
+                                "error": str(e)[:100]})
+
+    ok_count = sum(1 for r in results if r["ok"])
+    return {"ok": True, "results": results,
+            "published": ok_count, "failed": len(results) - ok_count}
+
+@app.post("/api/woo/export-csv")
+async def woo_export_csv(payload: PublishRequest):
+    """Xuất file CSV chuẩn WooCommerce"""
+    import csv, io as _io
+    output = _io.StringIO()
+    # WooCommerce CSV headers
+    headers = [
+        "ID","Type","SKU","Name","Published","Featured","Catalog visibility",
+        "Short description","Description","Tax status","In stock?","Stock",
+        "Regular price","Sale price","Categories","Tags","Images",
+        "Position"
+    ]
+    writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore")
+    writer.writeheader()
+    for prod in payload.products:
+        cats = ", ".join(prod.get("categories", []))
+        tags = ", ".join(prod.get("tags", []))
+        writer.writerow({
+            "ID": "",
+            "Type": "simple",
+            "SKU": prod.get("sku", ""),
+            "Name": prod.get("name", ""),
+            "Published": "1" if payload.status == "publish" else "0",
+            "Featured": "0",
+            "Catalog visibility": "visible",
+            "Short description": prod.get("short_description", ""),
+            "Description": prod.get("description", ""),
+            "Tax status": "taxable",
+            "In stock?": "1",
+            "Stock": "",
+            "Regular price": str(prod.get("price", "")),
+            "Sale price": "",
+            "Categories": cats,
+            "Tags": tags,
+            "Images": prod.get("image_url", ""),
+            "Position": "0",
+        })
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="woocommerce_products.csv"'}
+    )
