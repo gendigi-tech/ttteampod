@@ -221,6 +221,8 @@ textarea:focus{border-color:var(--accent)}
     </div>
 
     <div class="header-right">
+      <span id="user-badge" style="font-size:12px;color:var(--muted);font-family:var(--mono)"></span>
+      <button class="btn-xs" id="btn-admin" style="display:none;background:rgba(245,158,11,.1);border-color:var(--amber);color:var(--amber)" onclick="openAdmin()">👑 Admin</button>
       <!-- API key (shown in API mode) -->
       <div class="api-wrap" id="api-wrap">
         <span class="api-label">XAI KEY</span>
@@ -304,6 +306,50 @@ textarea:focus{border-color:var(--accent)}
   </div>
 </div>
 
+
+<!-- Admin Modal -->
+<div class="overlay" id="admin-modal" onclick="if(event.target===this)closeAdmin()">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-hdr">
+      <span class="modal-hdr-title">👑 Quản trị người dùng</span>
+      <button class="btn-mclose" id="btn-close-admin">×</button>
+    </div>
+    <div style="padding:16px;overflow-y:auto;max-height:70vh">
+      <!-- Add user form -->
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+        <div class="sec-label" style="margin-bottom:10px">Thêm người dùng mới</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Username</label>
+            <input type="text" id="new-uname" placeholder="username" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Tên hiển thị</label>
+            <input type="text" id="new-name" placeholder="Tên" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Mật khẩu</label>
+            <input type="password" id="new-pw" placeholder="password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+          </div>
+          <button class="btn-xs" id="btn-create-user" style="padding:8px 14px;height:35px">+ Tạo</button>
+        </div>
+      </div>
+      <!-- Users table -->
+      <div class="sec-label" style="margin-bottom:8px">Danh sách người dùng</div>
+      <div id="users-table"></div>
+      <!-- All history -->
+      <div style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="sec-label">Lịch sử tất cả người dùng</div>
+          <select id="hist-filter" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:4px 8px;outline:none">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div id="admin-hist-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Preview Modal -->
 <div class="overlay" id="preview-modal" onclick="if(event.target===this)closePreview()">
   <div class="modal-box">
@@ -417,6 +463,24 @@ let queue=[],qid=0,ws=null,running=false,resCnt=0,origMap={},curFolderIdx=0
 let currentMode='api'
 
 // ── Init ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  const bl=document.getElementById('btn-login'); if(bl) bl.addEventListener('click',doLogin)
+  const ba=document.getElementById('btn-close-admin'); if(ba) ba.addEventListener('click',closeAdmin)
+  const bc=document.getElementById('btn-create-user'); if(bc) bc.addEventListener('click', async ()=>{
+    const uname=document.getElementById('new-uname').value.trim()
+    const name=document.getElementById('new-name').value.trim()
+    const pw=document.getElementById('new-pw').value
+    if(!uname||!pw){alert('Nhập đủ username và mật khẩu!');return}
+    const u=window._user||{}
+    const r=await fetch(`/api/admin/users?admin_user=${u.username}&admin_pass=${window._adminPass||''}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:uname,password:pw,name:name||uname,role:'user'})
+    })
+    const d=await r.json()
+    if(d.ok){alert(`✅ Đã tạo user ${uname}`);document.getElementById('new-uname').value='';document.getElementById('new-name').value='';document.getElementById('new-pw').value='';loadAdminData()}
+    else alert('❌ Lỗi: '+d.detail)
+  })
+})
 window.onload=()=>{
   document.getElementById('api-key').value=localStorage.getItem('xai_key')||''
   const pf=document.getElementById('presets')
@@ -431,10 +495,22 @@ window.onload=()=>{
 
 // ── Login ─────────────────────────────────────────────────────
 async function doLogin(){
-  const r=await fetch(`/api/auth?password=${encodeURIComponent(document.getElementById('pw').value)}`)
+  const uname=document.getElementById('uname').value.trim()
+  const pw=document.getElementById('pw').value
+  if(!uname){document.getElementById('login-err').textContent='Nhập username!';document.getElementById('login-err').style.display='block';return}
+  const r=await fetch(`/api/auth?username=${encodeURIComponent(uname)}&password=${encodeURIComponent(pw)}`)
   const d=await r.json()
-  if(d.ok){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex'}
-  else document.getElementById('login-err').style.display='block'
+  if(d.ok){
+    window._user={username:d.username,role:d.role,name:d.name}
+    document.getElementById('login-screen').style.display='none'
+    document.getElementById('app').style.display='flex'
+    document.getElementById('user-badge').textContent=`👤 ${d.name}`
+    if(d.role==='admin'){document.getElementById('btn-admin').style.display='inline-flex'}
+    loadHistory()
+  } else {
+    document.getElementById('login-err').textContent='Sai username hoặc mật khẩu!'
+    document.getElementById('login-err').style.display='block'
+  }
 }
 
 // ── Mode ──────────────────────────────────────────────────────
@@ -572,6 +648,7 @@ async function runFolder(idx){
     const ls=JSON.parse(localStorage.getItem('pod_settings')||'{}')
     ws.onopen=()=>ws.send(JSON.stringify({
       api_key:key, prompt, images, mode:currentMode, folder_name:g.name,
+      username:(window._user||{}).username||'guest',
       telegram_token:ls.telegram_token||'',
       telegram_chat_id:ls.telegram_chat_id||'',
       app_url:ls.app_url||location.origin,
@@ -754,7 +831,101 @@ async function clearHistory(){
   loadHistory()
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeSettings();closeDlg(false)}})
+
+// ── Admin ─────────────────────────────────────────────────────
+async function openAdmin(){
+  document.getElementById('admin-modal').classList.add('open')
+  await loadAdminData()
+}
+function closeAdmin(){document.getElementById('admin-modal').classList.remove('open')}
+
+async function loadAdminData(){
+  const u=window._user||{}
+  const r=await fetch(`/api/admin/users?admin_user=${u.username}&admin_pass=${window._adminPass||''}`)
+  if(r.status===403){
+    const pw=prompt('Nhập lại mật khẩu admin để xác nhận:')
+    if(!pw)return; window._adminPass=pw
+    return loadAdminData()
+  }
+  const users=await r.json()
+  renderUsersTable(users)
+  // Load filter
+  const sel=document.getElementById('hist-filter')
+  sel.innerHTML='<option value="">Tất cả</option>'
+  users.forEach(u=>sel.innerHTML+=`<option value="${u.username}">${u.name} (${u.username})</option>`)
+  sel.onchange=()=>loadAdminHistory(sel.value)
+  await loadAdminHistory('')
+}
+
+function renderUsersTable(users){
+  const u=window._user||{}
+  const div=document.getElementById('users-table')
+  div.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr 80px 60px 60px auto;gap:6px;font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;padding:0 4px">
+    <span>USERNAME</span><span>TÊN</span><span>ROLE</span><span>NGÀY TẠO</span><span>ẢNH</span><span></span>
+  </div>`
+  users.forEach(usr=>{
+    const row=document.createElement('div')
+    row.style.cssText='display:grid;grid-template-columns:1fr 1fr 80px 60px 60px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px;font-size:12px;font-family:var(--mono)'
+    row.innerHTML=`
+      <span style="color:${usr.role==='admin'?'var(--amber)':'var(--text)'}">${usr.username}</span>
+      <span>${usr.name}</span>
+      <span style="color:${usr.role==='admin'?'var(--amber)':'var(--muted)'}">${usr.role}</span>
+      <span style="color:var(--muted);font-size:10px">${usr.created}</span>
+      <span style="color:var(--accent)">${usr.history_count}</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn-xs" style="padding:4px 8px;font-size:10px" onclick="changePw('${usr.username}')">🔑 Đổi mật khẩu</button>
+        ${usr.username!==u.username?`<button class="btn-xs" style="padding:4px 8px;font-size:10px;color:var(--red);border-color:var(--red)" onclick="deleteUser('${usr.username}')">✕</button>`:''}
+      </div>`
+    div.appendChild(row)
+  })
+}
+
+async function loadAdminHistory(filterUser=''){
+  const u=window._user||{}
+  const r=await fetch(`/api/admin/history?admin_user=${u.username}&admin_pass=${window._adminPass||''}`)
+  if(!r.ok)return
+  const h=await r.json()
+  const filtered=filterUser?h.filter(e=>e.username===filterUser):h
+  const grid=document.getElementById('admin-hist-grid')
+  grid.innerHTML=''
+  filtered.slice(0,50).forEach(e=>{
+    const url=`/api/download/${e.result}`
+    const c=document.createElement('div');c.className='res-card'
+    c.innerHTML=`
+      <div class="res-img-wrap"><img class="res-img" src="${url}" onerror="this.style.opacity='.3'"><div class="res-overlay">🔍</div></div>
+      <div class="res-info">
+        <div class="res-name">${e.original}</div>
+        <div style="font-size:10px;color:var(--accent);font-family:var(--mono);margin-bottom:2px">👤 ${e.username||'?'}</div>
+        <div class="res-meta">${e.timestamp}</div>
+        <button class="btn-dl" onclick="dlFile('${e.result}')">⬇ Tải</button>
+      </div>`
+    grid.appendChild(c)
+  })
+  if(!filtered.length) grid.innerHTML='<div style="color:var(--muted);font-size:13px;padding:20px">Chưa có lịch sử</div>'
+}
+
+async function changePw(username){
+  const pw=prompt(`Mật khẩu mới cho ${username}:`)
+  if(!pw||pw.length<4){alert('Mật khẩu tối thiểu 4 ký tự');return}
+  const u=window._user||{}
+  const r=await fetch(`/api/admin/users/${username}/password?new_password=${encodeURIComponent(pw)}&admin_user=${u.username}&admin_pass=${window._adminPass||''}`,{method:'PUT'})
+  const d=await r.json()
+  alert(d.ok?`✅ Đã đổi mật khẩu cho ${username}`:'❌ Lỗi')
+}
+
+async function deleteUser(username){
+  if(!confirm(`Xoá user "${username}"? Thao tác không thể hoàn tác!`))return
+  const u=window._user||{}
+  const r=await fetch(`/api/admin/users/${username}?admin_user=${u.username}&admin_pass=${window._adminPass||''}`,{method:'DELETE'})
+  const d=await r.json()
+  if(d.ok){alert(`✅ Đã xoá ${username}`);loadAdminData()}
+  else alert('❌ Lỗi xoá user')
+}
+
+// Init admin password cache from localStorage
+window._adminPass = localStorage.getItem('xai_key') ? '' : ''
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeSettings();closeAdmin();closeDlg(false)}})
 </script>
 </body>
 </html>
